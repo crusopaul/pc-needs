@@ -1,13 +1,26 @@
 Config = {}
 
+-- Enables /statusRoll for testing / setup of the StatMaxImpactOnStatusRoll / StatusPointToRollAgainst
+Config.Debug = false
+
+-- Seconds between status ticks - be mindful of this value when setting up tickDecay on status types
 Config.TickTime = 5
 
+-- Bounds for the status values - adjust and rerun SQL if modified
 Config.StatMinimum = 0
 Config.StatMaximum = 100000
 
+-- Both used for ease of use below
 local statInterval = Config.StatMaximum - Config.StatMinimum
 local statMidpoint = statInterval / 2
 
+-- The max impact that the difficulty can have on a status roll
+Config.StatMaxImpactOnStatusRoll = statInterval / 3
+
+-- The value that status rolls must be rolled against to be considered a pass
+Config.StatusPointToRollAgainst = statInterval / 3
+
+-- A function to kill a player randomly within the next 0.001-10s
 local function kill(source)
     CreateThread(function()
         local roll = math.random(1, 10000)
@@ -16,6 +29,7 @@ local function kill(source)
     end)
 end
 
+-- Status types
 Config.Status = {}
 
 Config.Status.dexterity = {
@@ -72,7 +86,7 @@ Config.Status.hunger = {
     availableToClient = true,
     tickDecay = 50,
     onTick = function(source, identifier, value)
-        if value == Config.StatMinimum then
+        if value == Config.StatMinimum then -- If no hunger, kill
             kill(source)
         end
     end
@@ -84,7 +98,7 @@ Config.Status.thirst = {
     availableToClient = true,
     tickDecay = 80,
     onTick = function(source, identifier, value)
-        if value == Config.StatMinimum then
+        if value == Config.StatMinimum then -- If no thirst, kill
             kill(source)
         end
     end
@@ -101,19 +115,19 @@ Config.Status.stress = {
         if vehicle then
             local speed = GetEntitySpeed(vehicle)
 
-            if speed >= 89.4 then
+            if speed >= 89.4 then -- at 200 mph add More stress
                 alterStatus(identifier, 'stress', 1200)
                 value = bindValue(value + 1200)
-            elseif speed >= 67.1 then
+            elseif speed >= 67.1 then -- at 150 mph add more stress
                 alterStatus(identifier, 'stress', 1000)
                 value = bindValue(value + 1000)
-            elseif speed >= 44.7 then
+            elseif speed >= 44.7 then -- at 100 mph begin adding stress
                 alterStatus(identifier, 'stress', 800)
                 value = bindValue(value + 800)
             end
         end
 
-        if value == Config.StatMaximum then
+        if value == Config.StatMaximum then -- If fully stressed, kill
             kill(source)
         end
     end
@@ -125,14 +139,14 @@ Config.Status.caffeine = {
     availableToClient = true,
     tickDecay = 3000,
     onTick = function(source, identifier, value)
-        if value == Config.StatMaximum then
+        if value == Config.StatMaximum then -- Full caffeine should kill
             kill(source)
             TriggerClientEvent('pc-needs:client:SetWalkSpeed', source, 1.49)
-        elseif value >= statMidpoint then
+        elseif value >= statMidpoint then -- Any caffeine should have a noticeably boosted walk speed
             TriggerClientEvent('pc-needs:client:SetWalkSpeed', source, 1.49)
-        elseif value > Config.StatMinimum then
+        elseif value > Config.StatMinimum then -- Any caffeine should have a slightly boosted walk speed
             TriggerClientEvent('pc-needs:client:SetWalkSpeed', source, 1.2)
-        else
+        else -- No caffeine should have a normal walk speed
             TriggerClientEvent('pc-needs:client:SetWalkSpeed', source, 1)
         end
     end
@@ -146,10 +160,10 @@ Config.Status.alcohol = {
     availableToClient = true,
     tickDecay = 1000,
     onTick = function(source, identifier, value)
-        if value == Config.StatMaximum then
+        if value == Config.StatMaximum then -- Full alcohol should kill
             kill(source)
             TriggerClientEvent('pc-needs:client:SetDrunkEffect', source, true)
-        elseif value >= statInterval / 3 then
+        elseif value >= statInterval / 3 then -- 33.33% alcohol should impose random drunk animations and screen effect
             TriggerClientEvent('pc-needs:client:SetDrunkEffect', source, true)
             local outburstRoll = math.random(1, 100)
 
@@ -157,7 +171,7 @@ Config.Status.alcohol = {
                 local outburstEmote = outburstEmotes[math.random(1,4)]
                 TriggerClientEvent('pc-needs:client:SetDrunkOutburst', source, outburstEmote)
             end
-        else
+        else -- No alcohol should mean no screen effect
             TriggerClientEvent('pc-needs:client:SetDrunkEffect', source, false)
         end
     end
@@ -169,12 +183,12 @@ Config.Status.acid = {
     availableToClient = true,
     tickDecay = 2000,
     onTick = function(source, identifier, value)
-        if value == Config.StatMaximum then
+        if value == Config.StatMaximum then -- Full acid should kill
             kill(source)
             TriggerClientEvent('pc-needs:client:SetAcidEffect', source, true)
-        elseif value > Config.StatMinimum then
+        elseif value > Config.StatMinimum then -- Any acid should give screen effect
             TriggerClientEvent('pc-needs:client:SetAcidEffect', source, true)
-        else
+        else -- No acid should have no screen effect
             TriggerClientEvent('pc-needs:client:SetAcidEffect', source, false)
         end
     end
@@ -186,9 +200,9 @@ Config.Status.thc = {
     availableToClient = true,
     tickDecay = 6969,
     onTick = function(source, identifier, value)
-        if value >= statMidpoint then
+        if value >= statMidpoint then -- Half thc should have screen effect
             TriggerClientEvent('pc-needs:client:SetWeedEffect', source, true)
-        else
+        else -- Less than half thc should not have screen effect
             TriggerClientEvent('pc-needs:client:SetWeedEffect', source, false)
         end
     end
@@ -208,7 +222,7 @@ Config.Status.toxicity = {
         local newAmount = bindValue((str * 0.05) + (caf * 0.5) + (alc * 0.8) + (aci * 0.3) + (thc * 0.01))
         setStatus(identifier, 'toxicity', newAmount)
 
-        if newAmount == Config.StatMaximum then
+        if newAmount == Config.StatMaximum then -- If a linear sum of drug status amounts adds to full toxicity the player should die
             kill(source)
         end
     end

@@ -25,6 +25,6 @@ create table effect (
     expires datetime,
     primary key ( identifier, statusTypeName, `type` ),
     constraint check (`type` in ('buff','enfe')),
-    constraint check (amount between 0 and 100000),
+    constraint check (amount between -100000 and 100000),
     constraint check (expires is null or expires > created)
 );

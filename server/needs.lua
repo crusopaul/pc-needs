@@ -66,17 +66,19 @@ end, true, {
 ESX.RegisterCommand('addEffect', 'admin', function(xPlayer, args, showError)
     local name = args.name
     local type
+    local amount
+    local duration = args.duration
 
     if args.type == 'b' then
         type = 'buff'
-    elseif type == 'e' then
+        amount = args.amount
+    elseif args.type == 'e' then
         type = 'enfe'
+        amount = -args.amount
     else
         return
     end
 
-    local amount = args.amount
-    local duration = args.duration
     addEffect(xPlayer.identifier, name, type, amount, duration)
     tickSingleStatus(xPlayer, name)
 end, true, {
@@ -112,7 +114,7 @@ ESX.RegisterCommand('removeEffect', 'admin', function(xPlayer, args, showError)
 
     if args.type == 'b' then
         type = 'buff'
-    elseif type == 'e' then
+    elseif args.type == 'e' then
         type = 'enfe'
     else
         return
@@ -135,6 +137,52 @@ end, true, {
         },
     }
 })
+
+if Config.Debug then
+    ESX.RegisterCommand('statusRoll', 'admin', function(xPlayer, args, showError)
+        local name = args.name
+        local mode
+        local timesToRoll = args.timesToRoll
+
+        if args.mode == 'e' then
+            mode = 'easy'
+        elseif args.mode == 'm' then
+            mode = 'medium'
+        elseif args.mode == 'h' then
+            mode = 'hard'
+        else
+            return
+        end
+
+        for i=1,timesToRoll do
+            if statusRoll(xPlayer.identifier, name, mode) then
+                TriggerClientEvent('ox_lib:notify', xPlayer.source, { title = 'Passed', description = 'You passed the status roll.', type = 'success' })
+            else
+                TriggerClientEvent('ox_lib:notify', xPlayer.source, { title = 'Failed', description = 'You failed the status roll.', type = 'error' })
+            end
+        end
+    end, true, {
+        help = TranslateCap('command_statusRoll'),
+        validate = true,
+        arguments = {
+            {
+                name = 'name',
+                help = TranslateCap('command_statusRoll_name'),
+                type = 'string'
+            },
+            {
+                name = 'mode',
+                help = TranslateCap('command_statusRoll_mode'),
+                type = 'string'
+            },
+            {
+                name = 'timesToRoll',
+                help = TranslateCap('command_statusRoll_timesToRoll'),
+                type = 'number'
+            },
+        }
+    })
+end
 
 -- Tick thread
 RegisterNetEvent('pc-needs:server:tick', function()

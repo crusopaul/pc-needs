@@ -155,25 +155,26 @@ end
 
 exports('setStatus', setStatus)
 
-local statInterval = Config.StatMaximum - Config.StatMinimum
-local statMidpoint = statInterval / 2
-local statFifth = statInterval / 5
+local statImpact = Config.StatMaxImpactOnStatusRoll
+local statRollPoint = Config.StatusPointToRollAgainst
 
 function statusRoll(identifier, name, mode)
     local amount = getStatusAmountInternal(identifier, name)
     local difficultyEffect
 
     if mode == 'easy' then
-        difficultyEffect = -statFifth
+        difficultyEffect = math.random(1, math.floor(statImpact))
     elseif mode == 'medium' then
         difficultyEffect = 0
     elseif mode == 'hard' then
-        difficultyEffect = statFifth
+        difficultyEffect = -math.random(1, math.floor(statImpact))
     end
 
-    local statBenefit = amount - statMidpoint
-
-    return statMidpoint <= math.random(Config.StatMinimum, Config.StatMaximum) + statBenefit
+    if amount ~= Config.StatMinimum then
+        return statRollPoint <= math.random(Config.StatMinimum, amount) + difficultyEffect
+    else
+        return statRollPoint <= Config.StatMinimum + difficultyEffect
+    end
 end
 
 exports('statusRoll', statusRoll)
@@ -195,11 +196,11 @@ function addEffect(identifier, name, type, amount, duration)
                         { amount, identifier, name, type })
                 else
                     if type == 'buff' then
-                        MySQL.prepare.await('UPDATE effect A set expires = date_add(A.expires, interval ? second), amount = least(A.amount, ?) where A.identifier = ? and A.statusTypeName = ? and A.`type` = ?;',
-                            { duration * 0.5, amount, identifier, name, type })
+                        MySQL.prepare.await('UPDATE effect A set expires = date_add(A.expires, interval ? second) where A.identifier = ? and A.statusTypeName = ? and A.`type` = ?;',
+                            { duration * 0.5, identifier, name, type })
                     else
-                        MySQL.prepare.await('UPDATE effect A set expires = date_add(A.expires, interval ? second), amount = greatest(A.amount, ?) where A.identifier = ? and A.statusTypeName = ? and A.`type` = ?;',
-                            { duration, amount, identifier, name, type })
+                        MySQL.prepare.await('UPDATE effect A set expires = date_add(A.expires, interval ? second) where A.identifier = ? and A.statusTypeName = ? and A.`type` = ?;',
+                            { duration, identifier, name, type })
                     end
                 end
             else

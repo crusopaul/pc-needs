@@ -1,7 +1,7 @@
 # pc-needs
 A SQL based need system for an ESX environment.
 
-## Motivation
+# Motivation
 This resource was made to replace ESX's native status resources (namely esx_basicneeds, esx_optionalneeds, esx_status, and esx_hud) with an alternate and configurable status system. Currently ESX's provided system is predominantly client-sided whereas this status system operates predominantly on the server and syncs its state with the database.
 
 Moving the system to the server allows for:
@@ -11,26 +11,26 @@ Moving the system to the server allows for:
 
 This need system will not work out of the box with esx_hud for displaying status information.
 
-## Drawbacks
-This is a work in progress so you may run into performance issues using this resource - I would not recommend using it in a production environment before you can evaluate how your setup is going to impact performance.
+# Drawbacks
+This is a work in progress so you may run into performance issues using this resource - I would not recommend using it in a production environment before you can evaluate how your setup is going to impact performance. I would especially advise caution in the case of a split server / database server set up.
 
 This resource currently syncs its state to the database which inherently involves overhead. I am not sure if this is going to scale all that well and the only benefits of doing so are that there is a minimal risk of data loss on a server crash and that a large data buffer / copy of the database is not required.
 
 If the integrity of data is not worth the performance of this approach, then I intend to rewrite significant parts of this to utilize a large, internal state buffer that syncs periodically or on player connect / disconnect.
 
-## Dependencies
+# Dependencies
 This resource is intended to be used in tandem with pc-consumables / pc-hud in an ox_inventory environment, but you could easily omit pc-consumables or replace pc-hud.
 
 Additionally, you will need ESX.
 
-## Installation
+# Installation
 To install pc-needs:
 - Place the latest release into the resources folder
 - Run the provided SQL script if this is the first installation
 - Review config.lua for your needs
 - Ensure pc-needs
 
-## Known issues
+# Known issues
 For some reason, altering status types in the config.lua after already running pc-needs can occasionally cause SQL errors. If this occurs you may need to reset all status / effect data by doing the following:
 ```
 delete from status;
@@ -42,19 +42,33 @@ Alternatively you may use the removeType command in game to remove every existin
 
 There is also an issue you can create by changing the max and min amounts in the config without changing the table definition's constraints. If you run into this, you should drop and recreate the relevant tables with adjusted constraint values that match the new max and min values in the config.
 
+# Features
+
+## Traditional needs
+This system supports basic needs that are subject to a time decay (like hunger and thirst) while a player is connected.
+
+## Virtual needs
+This system computes tick effect by status type according to the precedence of the status type. As such, you are able make computed or virtual needs that are the result of one or more, lower precedence, status types (see toxicity.)
+
+## Temporary effects
+Exports can add temporary or permanent buffs / enfeeblements to players that expire in real time as opposed to tick timing while a player is connected.
+
+## RPG / Reputation traits
+With this system, you may create and modify relatively static status types that act like traditional RPG traits like strength, intelligence, etc. These kinds of traits also allow for a reputation-style status type.
+
+## Skill checks
+Exports can be used to make rolls against RPG / reputation-like status types with three levels of difficulty.
+
 ## Player augmentations
-This resource comes with the following augmentations:
+This resource comes with the following augmentations that can trigger based off of status type set up:
+
 - Player speed (caffeine)
 - Acid effect
 - Drunk effect (plus 5% chance of random outbursts, see config.lua)
 - High effect (thc)
 - Death / overdose
 
-Having more than status impose the same augmentation (except death or other similar one-offs) is not advised as they tend to overlap in an unintentional way. For example, caffeine and cocaine status types cannot both augment player speed otherwise the walk speed of the status type with the higher precedence overwrites that of the lower precedence.
-
-If there is an augmentation you want, you can easily add it to client/main.lua. Refer to current file for examples on how to accomplish this.
-
-## Exports
+# Exports
 Resources that intend to use this need system will need to utilize the following exports.
 
 ```
@@ -103,8 +117,6 @@ statusRoll(identifier, name, mode)
 - mode ("easy", "medium", "hard"): The difficulty of the roll
 
 Used for a classic RPG stat roll. For example, a "strength" status can be created with no tickDecay that is used to track a player's strength. If the player wants to flip their car, they may roll for it and allow their stat's strength or weakness influence the probabilty of success by using `statusRoll`.
-
-Currently untested.
 
 ```
 addEffect(identifier, name, type, amount, duration)

@@ -20,4 +20,9 @@ Locales['en'] = {
     ['command_addEffect'] = 'The amount',
     ['command_addEffect_name'] = 'The name of the status',
     ['command_addEffect_type'] = '(b)uff or (e)nfeeblement',
+
+    ['command_statusRoll'] = 'The amount',
+    ['command_statusRoll_name'] = 'The name of the status',
+    ['command_statusRoll_mode'] = '(e)asy, (m)edium, or (h)ard',
+    ['command_statusRoll_timesToRoll'] = 'The number of times to roll',
 }
