@@ -1,8 +1,3 @@
--- Use status calls to make configured types
-for k,v in pairs(Config.Status) do
-    addType(k, v.defaultAmount, v.precedence, v.availableToClient, v.tickDecay, v.onTick)
-end
-
 -- Register commands
 ESX.RegisterCommand('removeType', 'admin', function(xPlayer, args, showError)
     local name = args.name
@@ -23,7 +18,7 @@ ESX.RegisterCommand('alterStatus', 'admin', function(xPlayer, args, showError)
     local name = args.name
     local amount = args.amount
     alterStatus(xPlayer.identifier, name, amount)
-    tickSingleStatus(xPlayer, name)
+    tickSingleStatus(xPlayer.identifier, name)
 end, true, {
     help = TranslateCap('command_alterStatus'),
     validate = true,
@@ -45,7 +40,7 @@ ESX.RegisterCommand('setStatus', 'admin', function(xPlayer, args, showError)
     local name = args.name
     local amount = args.amount
     setStatus(xPlayer.identifier, name, amount)
-    tickSingleStatus(xPlayer, name)
+    tickSingleStatus(xPlayer.identifier, name)
 end, true, {
     help = TranslateCap('command_setStatus'),
     validate = true,
@@ -80,7 +75,7 @@ ESX.RegisterCommand('addEffect', 'admin', function(xPlayer, args, showError)
     end
 
     addEffect(xPlayer.identifier, name, type, amount, duration)
-    tickSingleStatus(xPlayer, name)
+    tickSingleStatus(xPlayer.identifier, name)
 end, true, {
     help = TranslateCap('command_addEffect'),
     validate = true,
@@ -191,6 +186,11 @@ RegisterNetEvent('pc-needs:server:tick', function()
 end)
 
 CreateThread(function()
+    -- Use status calls to make configured types
+    for k,v in pairs(Config.Status) do
+        addType(k, v.defaultAmount, v.precedence, v.availableToClient, v.tickDecay, v.onTick)
+    end
+
     local tickTime = Config.TickTime * 1000
 
     while true do

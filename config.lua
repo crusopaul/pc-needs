@@ -6,27 +6,26 @@ Config.Debug = false
 -- Seconds between status ticks - be mindful of this value when setting up tickDecay on status types
 Config.TickTime = 5
 
--- Bounds for the status values - adjust and rerun SQL if modified
-Config.StatMinimum = 0
-Config.StatMaximum = 100000
-
 -- Both used for ease of use below
-local statInterval = Config.StatMaximum - Config.StatMinimum
-local statMidpoint = statInterval / 2
+local statMidpoint = 100000 / 2
 
 -- The max impact that the difficulty can have on a status roll
-Config.StatMaxImpactOnStatusRoll = statInterval / 3
+Config.StatMaxImpactOnStatusRoll = 100000 / 3
 
 -- The value that status rolls must be rolled against to be considered a pass
-Config.StatusPointToRollAgainst = statInterval / 3
+Config.StatusPointToRollAgainst = 100000 / 3
 
 -- A function to kill a player randomly within the next 0.001-10s
 local function kill(source)
-    CreateThread(function()
-        local roll = math.random(1, 10000)
-        Wait(roll)
-        TriggerClientEvent('esx:killPlayer', source)
-    end)
+    local ped = GetPlayerPed(source)
+
+    if ped ~= 0 and GetEntityHealth(ped) ~= 0 then
+        CreateThread(function()
+            local roll = math.random(1, 10000)
+            Wait(roll)
+            TriggerClientEvent('esx:killPlayer', source)
+        end)
+    end
 end
 
 -- Status types
@@ -65,7 +64,7 @@ Config.Status.strength = {
 }
 
 Config.Status.crafting = {
-    defaultAmount = Config.StatMinimum,
+    defaultAmount = 0,
     precedence = 5,
     availableToClient = false,
     tickDecay = 0,
@@ -73,7 +72,7 @@ Config.Status.crafting = {
 }
 
 Config.Status.gathering = {
-    defaultAmount = Config.StatMinimum,
+    defaultAmount = 0,
     precedence = 6,
     availableToClient = false,
     tickDecay = 0,
@@ -81,31 +80,31 @@ Config.Status.gathering = {
 }
 
 Config.Status.hunger = {
-    defaultAmount = Config.StatMaximum,
+    defaultAmount = 100000,
     precedence = 7,
     availableToClient = true,
     tickDecay = 50,
     onTick = function(source, identifier, value)
-        if value == Config.StatMinimum then -- If no hunger, kill
+        if value == 0 then -- If no hunger, kill
             kill(source)
         end
     end
 }
 
 Config.Status.thirst = {
-    defaultAmount = Config.StatMaximum,
+    defaultAmount = 100000,
     precedence = 8,
     availableToClient = true,
     tickDecay = 80,
     onTick = function(source, identifier, value)
-        if value == Config.StatMinimum then -- If no thirst, kill
+        if value == 0 then -- If no thirst, kill
             kill(source)
         end
     end
 }
 
 Config.Status.stress = {
-    defaultAmount = Config.StatMinimum,
+    defaultAmount = 0,
     precedence = 9,
     availableToClient = true,
     tickDecay = 150,
@@ -127,25 +126,25 @@ Config.Status.stress = {
             end
         end
 
-        if value == Config.StatMaximum then -- If fully stressed, kill
+        if value == 100000 then -- If fully stressed, kill
             kill(source)
         end
     end
 }
 
 Config.Status.caffeine = {
-    defaultAmount = Config.StatMinimum,
+    defaultAmount = 0,
     precedence = 10,
     availableToClient = true,
     tickDecay = 3000,
     onTick = function(source, identifier, value)
-        if value == Config.StatMaximum then -- Full caffeine should kill
+        if value == 100000 then -- Full caffeine should kill
             kill(source)
-            TriggerClientEvent('pc-needs:client:SetWalkSpeed', source, 1.49)
-        elseif value >= statMidpoint then -- Any caffeine should have a noticeably boosted walk speed
-            TriggerClientEvent('pc-needs:client:SetWalkSpeed', source, 1.49)
-        elseif value > Config.StatMinimum then -- Any caffeine should have a slightly boosted walk speed
             TriggerClientEvent('pc-needs:client:SetWalkSpeed', source, 1.2)
+        elseif value >= statMidpoint then -- Half caffeine should have a "noticeably" boosted walk speed
+            TriggerClientEvent('pc-needs:client:SetWalkSpeed', source, 1.2)
+        elseif value > 0 then -- Any caffeine should have a slightly boosted walk speed
+            TriggerClientEvent('pc-needs:client:SetWalkSpeed', source, 1.1)
         else -- No caffeine should have a normal walk speed
             TriggerClientEvent('pc-needs:client:SetWalkSpeed', source, 1)
         end
@@ -155,15 +154,15 @@ Config.Status.caffeine = {
 local outburstEmotes = {'stumble', 'idledrunk', 'idledrunk2', 'idledrunk3'}
 
 Config.Status.alcohol = {
-    defaultAmount = Config.StatMinimum,
+    defaultAmount = 0,
     precedence = 11,
     availableToClient = true,
     tickDecay = 1000,
     onTick = function(source, identifier, value)
-        if value == Config.StatMaximum then -- Full alcohol should kill
+        if value == 100000 then -- Full alcohol should kill
             kill(source)
             TriggerClientEvent('pc-needs:client:SetDrunkEffect', source, true)
-        elseif value >= statInterval / 3 then -- 33.33% alcohol should impose random drunk animations and screen effect
+        elseif value >= 100000 / 3 then -- 33.33% alcohol should impose random drunk animations and screen effect
             TriggerClientEvent('pc-needs:client:SetDrunkEffect', source, true)
             local outburstRoll = math.random(1, 100)
 
@@ -178,15 +177,15 @@ Config.Status.alcohol = {
 }
 
 Config.Status.acid = {
-    defaultAmount = Config.StatMinimum,
+    defaultAmount = 0,
     precedence = 12,
     availableToClient = true,
     tickDecay = 2000,
     onTick = function(source, identifier, value)
-        if value == Config.StatMaximum then -- Full acid should kill
+        if value == 100000 then -- Full acid should kill
             kill(source)
             TriggerClientEvent('pc-needs:client:SetAcidEffect', source, true)
-        elseif value > Config.StatMinimum then -- Any acid should give screen effect
+        elseif value > 0 then -- Any acid should give screen effect
             TriggerClientEvent('pc-needs:client:SetAcidEffect', source, true)
         else -- No acid should have no screen effect
             TriggerClientEvent('pc-needs:client:SetAcidEffect', source, false)
@@ -195,7 +194,7 @@ Config.Status.acid = {
 }
 
 Config.Status.thc = {
-    defaultAmount = Config.StatMinimum,
+    defaultAmount = 0,
     precedence = 13,
     availableToClient = true,
     tickDecay = 6969,
@@ -209,7 +208,7 @@ Config.Status.thc = {
 }
 
 Config.Status.toxicity = {
-    defaultAmount = Config.StatMinimum,
+    defaultAmount = 0,
     precedence = 14,
     availableToClient = true,
     tickDecay = 0,
@@ -222,7 +221,7 @@ Config.Status.toxicity = {
         local newAmount = bindValue((str * 0.05) + (caf * 0.5) + (alc * 0.8) + (aci * 0.3) + (thc * 0.01))
         setStatus(identifier, 'toxicity', newAmount)
 
-        if newAmount == Config.StatMaximum then -- If a linear sum of drug status amounts adds to full toxicity the player should die
+        if newAmount == 100000 then -- If a linear sum of drug status amounts adds to full toxicity the player should die
             kill(source)
         end
     end

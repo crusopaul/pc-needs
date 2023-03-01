@@ -9,13 +9,8 @@ local function getStatusTypes()
     return MySQL.query.await('SELECT name from statusTypes order by precedence;', {})
 end
 
-local function getStatusTypetickDecay(name)
+local function getStatusTypeTickDecay(name)
     return MySQL.prepare.await('SELECT tickDecay from statusTypes where name = ?;',
-        { name })
-end
-
-local function getStatusTypeDefaultAmount(name)
-    return MySQL.prepare.await('SELECT defaultAmount from statusTypes where name = ?;',
         { name })
 end
 
@@ -29,16 +24,6 @@ local function getMaxPrecendence()
 end
 
 -- local status relations
-local function checkStatusTableExistence(identifier, name)
-    return 1 == MySQL.prepare.await('SELECT 1 from status where identifier = ? and statusTypeName = ?;',
-        { identifier, name })
-end
-
-local function getStatusTableAmount(identifier, name)
-    return MySQL.prepare.await('SELECT amount from status where identifier = ? and statusTypeName = ?;',
-        { identifier, name })
-end
-
 local function getStatusAmountInternal(identifier, name)
     return MySQL.prepare.await([[SELECT ifnull(B.amount, A.defaultAmount)
 from statusTypes A
@@ -65,10 +50,10 @@ end
 local function bindValueInternal(field)
     local val = field
 
-    if val < Config.StatMinimum then
-        val = Config.StatMinimum
-    elseif val > Config.StatMaximum then
-        val = Config.StatMaximum
+    if val < 0 then
+        val = 0
+    elseif val > 100000 then
+        val = 100000
     end
 
     return val
@@ -80,35 +65,30 @@ function addType(name, defaultAmount, precedence, availableToClient, tickDecay, 
 
     local boundDefaultAmount = bindValueInternal(defaultAmount)
 
-    CreateThread(function()
-        local maxPrecedence = getMaxPrecendence()
+    local maxPrecedence = getMaxPrecendence()
 
-        if not maxPrecedence then
-            maxPrecedence = 0
-        end
+    if not maxPrecedence then
+        maxPrecedence = 0
+    end
 
-        MySQL.prepare.await('UPDATE statusTypes A set precedence = ? where A.precedence = ? and name != ?;',
-            { maxPrecedence + 1, precedence, name })
+    MySQL.prepare.await('UPDATE statusTypes A set precedence = ? where A.precedence = ? and name != ?;',
+        { maxPrecedence + 1, precedence, name })
 
-        if checkTypeExistence(name) then
-            MySQL.prepare.await('UPDATE statusTypes A set defaultAmount = ?, precedence = ?, availableToClient = ?, tickDecay = ? where name = ?;',
-                { boundDefaultAmount, precedence, availableToClient, tickDecay, name })
-        else
-            MySQL.prepare.await('INSERT into statusTypes values ( ?, ?, ?, ?, ? );',
-                { name, boundDefaultAmount, precedence, availableToClient, tickDecay })
-        end
-    end)
+    if checkTypeExistence(name) then
+        MySQL.prepare.await('UPDATE statusTypes A set defaultAmount = ?, precedence = ?, availableToClient = ?, tickDecay = ? where name = ?;',
+            { boundDefaultAmount, precedence, availableToClient, tickDecay, name })
+    else
+        MySQL.prepare.await('INSERT into statusTypes values ( ?, ?, ?, ?, ? );',
+            { name, boundDefaultAmount, precedence, availableToClient, tickDecay })
+    end
 end
 
 exports('addType', addType)
 
 function removeType(name)
-    CreateThread(function()
-        MySQL.prepare.await('DELETE A from effect A where statusTypeName = ?;', { name })
-        MySQL.prepare.await('DELETE A from status A where statusTypeName = ?;', { name })
-        MySQL.prepare.await('DELETE A from statusTypes A where name = ?;', { name })
-    end)
-
+    MySQL.prepare.await('DELETE A from effect A where statusTypeName = ?;', { name })
+    MySQL.prepare.await('DELETE A from status A where statusTypeName = ?;', { name })
+    MySQL.prepare.await('DELETE A from statusTypes A where name = ?;', { name })
     statusType[name] = nil
 end
 
@@ -120,37 +100,13 @@ end
 exports('getStatusAmount', getStatusAmount)
 
 function alterStatus(identifier, name, amount)
-    if checkStatusTypeAvailable(name) then
-        if checkStatusTableExistence(identifier, name) then
-            local newAmount = bindValueInternal(getStatusTableAmount(identifier, name) + amount)
-
-            if newAmount ~= getStatusTypeDefaultAmount(name) then
-                MySQL.prepare.await('UPDATE status A set amount = ? where A.identifier = ? and A.statusTypeName = ?;',
-                    { newAmount, identifier, name })
-            else
-                MySQL.prepare.await('DELETE A from status A where A.identifier = ? and A.statusTypeName = ?;',
-                    { identifier, name })
-            end
-        else
-            local newAmount = bindValueInternal(getStatusTypeDefaultAmount(name) + amount)
-
-            if newAmount ~= getStatusTypeDefaultAmount(name) then
-                MySQL.prepare.await('INSERT into status values ( ?, ?, ? );',
-                    { identifier, name, newAmount })
-            end
-        end
-    end
+    MySQL.prepare.await('INSERT into status select ?, ?, case when defaultAmount + ? > 100000 then 100000 when defaultAmount + ? < 0 then 0 else defaultAmount + ? end from statusTypes where name = ? on duplicate key update amount = case when amount + ? > 100000 then 100000 when amount + ? < 0 then 0 else amount + ? end;', { identifier, name, amount, amount, amount, name, amount, amount, amount })
 end
 
 exports('alterStatus', alterStatus)
 
 function setStatus(identifier, name, amount)
-    local currentAmount = getStatusAmountInternal(identifier, name)
-    local diff = amount - currentAmount
-
-    if diff ~= 0 then
-        alterStatus(identifier, name, diff)
-    end
+    MySQL.prepare.await('INSERT into status select ?, ?, case when ? > 100000 then 100000 when ? < 0 then 0 else ? end from statusTypes where name = ? on duplicate key update amount = case when ? > 100000 then 100000 when ? < 0 then 0 else ? end', { identifier, name, amount, amount, amount, name, amount, amount, amount })
 end
 
 exports('setStatus', setStatus)
@@ -170,68 +126,64 @@ function statusRoll(identifier, name, mode)
         difficultyEffect = -math.random(1, math.floor(statImpact))
     end
 
-    if amount ~= Config.StatMinimum then
-        return statRollPoint <= math.random(Config.StatMinimum, amount) + difficultyEffect
+    if amount ~= 0 then
+        return statRollPoint <= math.random(0, amount) + difficultyEffect
     else
-        return statRollPoint <= Config.StatMinimum + difficultyEffect
+        return statRollPoint <= 0 + difficultyEffect
     end
 end
 
 exports('statusRoll', statusRoll)
 
-function tickSingleStatus(xPlayer, name)
-    local identifier = xPlayer.identifier
-    local source = xPlayer.source
-    local value = getStatusAmountInternal(identifier, name)
-    statusType[name](source, identifier, value)
+function tickSingleStatus(identifier, name)
+    local src = ESX.GetPlayerFromIdentifier(identifier)
+
+    if src and statusType[name] then
+        local value = getStatusAmountInternal(identifier, name)
+        statusType[name](src, identifier, value)
+    end
 end
 
 -- global effect interaction
 function addEffect(identifier, name, type, amount, duration)
     if amount ~= 0 then
-        CreateThread(function()
-            if checkEffectTableExistence(identifier, name, type) then
-                if duration == 0 then
-                    MySQL.prepare.await('UPDATE effect A set expires = null, amount = least(A.amount, ?) where A.identifier = ? and A.statusTypeName = ? and A.`type` = ?;',
-                        { amount, identifier, name, type })
-                else
-                    if type == 'buff' then
-                        MySQL.prepare.await('UPDATE effect A set expires = date_add(A.expires, interval ? second) where A.identifier = ? and A.statusTypeName = ? and A.`type` = ?;',
-                            { duration * 0.5, identifier, name, type })
-                    else
-                        MySQL.prepare.await('UPDATE effect A set expires = date_add(A.expires, interval ? second) where A.identifier = ? and A.statusTypeName = ? and A.`type` = ?;',
-                            { duration, identifier, name, type })
-                    end
-                end
-            else
-                if (type == 'buff' or type == 'enfe') and checkTypeExistence(name) then
-                    if duration == 0 then
-                        MySQL.prepare.await('INSERT into effect values ( ?, ?, ?, ?, now(), null);',
-                            { identifier, name, type, amount, duration })
-                    else
-                        MySQL.prepare.await('INSERT into effect values ( ?, ?, ?, ?, now(), date_add(now(), interval ? second));',
-                            { identifier, name, type, amount, duration })
-                    end
-                end
-            end
-
+        if checkEffectTableExistence(identifier, name, type) then
+            MySQL.prepare.await([[UPDATE effect
+set
+    amount = case
+        when type = 'buff'
+        then greatest(?, amount)
+        else least(?, amount)
+    end,
+    expires = case
+        when expires is null
+        then null
+        when type = 'buff'
+        then date_add(expires, interval ? second)
+        else date_add(expires, interval ? second)
+    end
+where
+    identifier = ?
+    and statusTypeName = ?
+    and type = ?;
+]], { amount, amount, math.floor(duration * 0.5), duration, identifier, name, type })
+        else
+            MySQL.prepare.await('INSERT into effect values (?, ?, ?, ?, now(), date_add(now(), interval ? second));', { identifier, name, type, amount, duration })
             alterStatus(identifier, name, amount)
-        end)
+        end
     end
 end
 
 exports('addEffect', addEffect)
 
 function removeEffect(identifier, name, type)
-    CreateThread(function()
-        local effectAmount = getEffectAmount(identifier, name, type)
+    local effectAmount = getEffectAmount(identifier, name, type)
 
-        if effectAmount then
-            alterStatus(identifier, name, -effectAmount)
-            MySQL.prepare.await('DELETE A from effect A where A.identifier = ? and A.statusTypeName = ? and A.`type` = ?;',
-                { identifier, name, type })
-        end
-    end)
+    if effectAmount then
+        alterStatus(identifier, name, -effectAmount)
+        MySQL.prepare.await('DELETE A from effect A where A.identifier = ? and A.statusTypeName = ? and A.`type` = ?;',
+            { identifier, name, type })
+    end
 end
 
 exports('removeEffect', removeEffect)
@@ -246,7 +198,7 @@ exports('bindValue', bindValue)
 function statusTick()
     for _,v in ipairs(getStatusTypes()) do
         local name = v.name
-        local tickDecay = getStatusTypetickDecay(name)
+        local tickDecay = getStatusTypeTickDecay(name)
 
         for _,q in pairs(ESX.GetExtendedPlayers()) do
             local identifier = q.identifier
