@@ -1,112 +1,146 @@
--- local statusTypes relations
-local statusType = {}
+-- local states
+local statusTypes = {}
+local status = {}
+local identMap = {}
 
-local function checkTypeExistence(name)
-    return 1 == MySQL.prepare.await('SELECT 1 from statusTypes where name = ?;', { name })
-end
+-- State sync / desync
+RegisterNetEvent('esx_multicharacter:CharacterChosen', function(charid, isNew)
+    local src = source
+    local xPlayer = ESX.GetPlayerFromId(src)
 
-local function getStatusTypes()
-    return MySQL.query.await('SELECT name from statusTypes order by precedence;', {})
-end
-
-local function getStatusTypeTickDecay(name)
-    return MySQL.prepare.await('SELECT tickDecay from statusTypes where name = ?;',
-        { name })
-end
-
-local function checkStatusTypeAvailable(name)
-    return MySQL.prepare.await('SELECT availableToClient from statusTypes where name = ?;',
-        { name })
-end
-
-local function getMaxPrecendence()
-    return MySQL.query.await('SELECT max(precedence) as max from statusTypes;', {})[1].max
-end
-
--- local status relations
-local function getStatusAmountInternal(identifier, name)
-    return MySQL.prepare.await([[SELECT ifnull(B.amount, A.defaultAmount)
-from statusTypes A
-left join status B
-on
-    B.statusTypeName = A.name
-    and B.identifier = ?
-where
-    A.name = ?;
-]], { identifier, name })
-end
-
--- local effect relations
-local function checkEffectTableExistence(identifier, name, type)
-    return 1 == MySQL.prepare.await('SELECT 1 from effect where identifier = ? and statusTypeName = ? and `type` = ?;',
-        { identifier, name, type })
-end
-
-local function getEffectAmount(identifier, name, type)
-    return MySQL.prepare.await('SELECT amount from effect where identifier = ? and statusTypeName = ? and `type` = ?;',
-        { identifier, name, type })
-end
-
-local function bindValueInternal(field)
-    local val = field
-
-    if val < 0 then
-        val = 0
-    elseif val > 100000 then
-        val = 100000
+    while not xPlayer do
+        Wait(100)
+        xPlayer = ESX.GetPlayerFromId(src)
     end
 
-    return val
-end
+    local identifier = xPlayer.identifier
+    identMap[src] = identifier
 
--- global statusTypes interaction
-function addType(name, defaultAmount, precedence, availableToClient, tickDecay, onTick)
-    statusType[name] = onTick
-
-    local boundDefaultAmount = bindValueInternal(defaultAmount)
-
-    local maxPrecedence = getMaxPrecendence()
-
-    if not maxPrecedence then
-        maxPrecedence = 0
+    if not status[identifier] then
+        status[identifier] = {}
     end
 
-    MySQL.prepare.await('UPDATE statusTypes A set precedence = ? where A.precedence = ? and name != ?;',
-        { maxPrecedence + 1, precedence, name })
-
-    if checkTypeExistence(name) then
-        MySQL.prepare.await('UPDATE statusTypes A set defaultAmount = ?, precedence = ?, availableToClient = ?, tickDecay = ? where name = ?;',
-            { boundDefaultAmount, precedence, availableToClient, tickDecay, name })
-    else
-        MySQL.prepare.await('INSERT into statusTypes values ( ?, ?, ?, ?, ? );',
-            { name, boundDefaultAmount, precedence, availableToClient, tickDecay })
+    for k,v in pairs(statusTypes) do
+        status[identifier][k] = MySQL.prepare.await('SELECT amount from status where identifier = ? and statusTypeName = ?', { identifier, k }) or v.defaultAmount
     end
+end)
+
+AddEventHandler('esx:playerDropped', function(playerId, reason)
+    local src = playerId
+    local identifier = identMap[src]
+
+    if identifier then
+        for k,v in pairs(status[identifier]) do
+            MySQL.prepare.await('INSERT INTO status values ( ?, ?, ? ) on duplicate key update amount = values(amount)', { identMap[src], k, v })
+        end
+
+        status[identifier] = nil
+        identMap[src] = nil
+    end
+end)
+
+AddEventHandler('onResourceStart', function(resourceName)
+    if GetCurrentResourceName() == resourceName then
+        statusTypes = Config.Status
+        status = {}
+
+        for k,v in pairs(ESX.GetExtendedPlayers()) do
+            identMap[v.source] = v.identifier
+
+            for l,q in pairs(statusTypes) do
+                if not status[v.identifier] then
+                    status[v.identifier] = {}
+                end
+
+                status[v.identifier][l] = MySQL.prepare.await('SELECT amount from status where identifier = ? and statusTypeName = ?', { v.identifier, l }) or q.defaultAmount
+            end
+        end
+    end
+end)
+
+AddEventHandler('onResourceStop', function(resourceName)
+    if GetCurrentResourceName() == resourceName then
+        for _,v in pairs(identMap) do
+            for l,q in pairs(status) do
+                MySQL.prepare.await('UPDATE status set amount = ? where identifier = ? and statusTypeName = ?', { q, v.identifier, l })
+            end
+        end
+    end
+end)
+
+AddEventHandler('txAdmin:events:scheduledRestart', function(eventData)
+    if eventData.secondsRemaining == 60 then
+        for _,v in pairs(identMap) do
+            for l,q in pairs(status) do
+                MySQL.prepare.await('UPDATE status set amount = ? where identifier = ? and statusTypeName = ?', { q, v.identifier, l })
+            end
+        end
+    end
+end)
+
+-- global interaction
+function addType(name, defaultAmount, availableToClient, tickDecay, onTick)
+    statusTypes[name] = {
+        defaultAmount = defaultAmount,
+        availableToClient = availableToClient,
+        tickDecay = tickDecay,
+        onTick = onTick,
+    }
 end
 
 exports('addType', addType)
 
-function removeType(name)
-    MySQL.prepare.await('DELETE A from effect A where statusTypeName = ?;', { name })
-    MySQL.prepare.await('DELETE A from status A where statusTypeName = ?;', { name })
-    MySQL.prepare.await('DELETE A from statusTypes A where name = ?;', { name })
-    statusType[name] = nil
-end
-
 -- global status interaction
 function getStatusAmount(identifier, name)
-    return getStatusAmountInternal(identifier, name)
+    if status[identifier] then
+        return status[identifier][name] or statusTypes[name].defaultAmount
+    else -- offline player, undefined
+        return statusTypes[name].defaultAmount
+    end
 end
 
 exports('getStatusAmount', getStatusAmount)
 
 function alterStatus(identifier, name, amount)
-    MySQL.prepare.await('INSERT into status select ?, ?, case when defaultAmount + ? > 100000 then 100000 when defaultAmount + ? < 0 then 0 else defaultAmount + ? end from statusTypes where name = ? on duplicate key update amount = case when amount + ? > 100000 then 100000 when amount + ? < 0 then 0 else amount + ? end;', { identifier, name, amount, amount, amount, name, amount, amount, amount })
+    local currentAmount
+
+    if status[identifier] then
+        currentAmount = status[identifier][name] or statusTypes[name].defaultAmount
+    else -- offline player, undefined
+        currentAmount = statusTypes[name].defaultAmount
+    end
+
+    local newAmount = currentAmount + amount
+
+    if newAmount > 100000 then
+        newAmount = 100000
+    elseif newAmount < 0 then
+        newAmount = 0
+    end
+
+    if status[identifier] then
+        status[identifier][name] = newAmount
+    else -- offline player, undefined
+        -- ...
+    end
 end
 
 exports('alterStatus', alterStatus)
 
 function setStatus(identifier, name, amount)
-    MySQL.prepare.await('INSERT into status select ?, ?, case when ? > 100000 then 100000 when ? < 0 then 0 else ? end from statusTypes where name = ? on duplicate key update amount = case when ? > 100000 then 100000 when ? < 0 then 0 else ? end', { identifier, name, amount, amount, amount, name, amount, amount, amount })
+    local newAmount = amount
+
+    if newAmount > 100000 then
+        newAmount = 100000
+    elseif newAmount < 0 then
+        newAmount = 0
+    end
+
+    if status[identifier] then
+        status[identifier][name] = amount
+    else -- offline player, undefined
+        -- ...
+    end
 end
 
 exports('setStatus', setStatus)
@@ -115,7 +149,14 @@ local statImpact = Config.StatMaxImpactOnStatusRoll
 local statRollPoint = Config.StatusPointToRollAgainst
 
 function statusRoll(identifier, name, mode)
-    local amount = getStatusAmountInternal(identifier, name)
+    local amount
+
+    if status[identifier] then
+        amount = status[identifier][name] or statusTypes[name].defaultAmount
+    else -- offline player, undefined
+        amount = statusTypes[name].defaultAmount
+    end
+
     local difficultyEffect
 
     if mode == 'easy' then
@@ -129,22 +170,38 @@ function statusRoll(identifier, name, mode)
     if amount ~= 0 then
         return statRollPoint <= math.random(0, amount) + difficultyEffect
     else
-        return statRollPoint <= 0 + difficultyEffect
+        return statRollPoint <= difficultyEffect
     end
 end
 
 exports('statusRoll', statusRoll)
 
 function tickSingleStatus(identifier, name)
-    local src = ESX.GetPlayerFromIdentifier(identifier)
+    local src = ESX.GetPlayerFromIdentifier(identifier).source
+    local currentAmount
 
-    if src and statusType[name] then
-        local value = getStatusAmountInternal(identifier, name)
-        statusType[name](src, identifier, value)
+    if status[identifier] then
+        currentAmount = status[identifier][name] or statusTypes[name].defaultAmount
+    else -- offline player, undefined
+        currentAmount = statusTypes[name].defaultAmount
+    end
+
+    if statusTypes[name].onTick then
+        statusTypes[name].onTick(src, identifier, currentAmount)
     end
 end
 
--- global effect interaction
+-- global effect interaction-- local effect relations
+local function checkEffectTableExistence(identifier, name, type)
+    return 1 == MySQL.prepare.await('SELECT 1 from effect where identifier = ? and statusTypeName = ? and `type` = ?;',
+        { identifier, name, type })
+end
+
+local function getEffectAmount(identifier, name, type)
+    return MySQL.prepare.await('SELECT amount from effect where identifier = ? and statusTypeName = ? and `type` = ?;',
+        { identifier, name, type })
+end
+
 function addEffect(identifier, name, type, amount, duration)
     if amount ~= 0 then
         if checkEffectTableExistence(identifier, name, type) then
@@ -189,34 +246,67 @@ end
 exports('removeEffect', removeEffect)
 
 function bindValue(field)
-    return bindValueInternal(field)
+    local val = field
+
+    if val < 0 then
+        val = 0
+    elseif val > 100000 then
+        val = 100000
+    end
+
+    return val
 end
 
 exports('bindValue', bindValue)
 
 -- global tick control
 function statusTick()
-    for _,v in ipairs(getStatusTypes()) do
-        local name = v.name
-        local tickDecay = getStatusTypeTickDecay(name)
+    for k,v in pairs(statusTypes) do
+        local tickDecay = v.tickDecay
 
-        for _,q in pairs(ESX.GetExtendedPlayers()) do
-            local identifier = q.identifier
-            local source = q.source
+        for l,q in pairs(identMap) do
+            local identifier = q
+            local currentAmount
 
-            if statusType[name] then
-                statusType[name](source, identifier, getStatusAmountInternal(identifier, name))
+            if status[identifier] then
+                currentAmount = status[identifier][k] or v.defaultAmount
+            else -- offline player, undefined
+                currentAmount = v.defaultAmount
+            end
+
+            if v.onTick then
+                v.onTick(l, identifier, currentAmount)
             end
 
             if tickDecay ~= 0 then
-                alterStatus(identifier, name, -tickDecay)
+                alterStatus(identifier, k, -tickDecay)
             end
         end
     end
 end
 
+local effectTickRunning = false
+
 function effectTick()
-    for _,v in ipairs(MySQL.query.await('SELECT identifier, statusTypeName, type from effect where expires <= now();', {})) do
-        removeEffect(v.identifier, v.statusTypeName, v.type)
+    if not effectTickRunning then
+        effectTickRunning = true
+
+        for _,v in pairs(ESX.GetExtendedPlayers()) do
+            local data = MySQL.prepare.await('SELECT statusTypeName, type from effect where expires <= now() and identifier = ?',
+                { v.identifier })
+
+            if type(data) == 'table' then
+                for _,q in pairs(data) do
+                    if type(q) ~= 'table' then
+                        removeEffect(v.identifier, data.statusTypeName, data.type)
+                        break
+                    else
+                        removeEffect(v.identifier, q.statusTypeName, q.type)
+                    end
+                end
+            end
+        end
+
+        effectTickRunning = false
     end
 end
