@@ -1,54 +1,18 @@
 # pc-needs
 A SQL based need system for an ESX environment.
 
-# Motivation
-This resource was made to replace ESX's native status resources (namely esx_basicneeds, esx_optionalneeds, esx_status, and esx_hud) with an alternate and configurable status system. Currently ESX's provided system is predominantly client-sided whereas this status system operates predominantly on the server and syncs its state with the database.
+This resource was made to replace ESX’s native status resources (namely esx_basicneeds, esx_optionalneeds, esx_status, and esx_hud) with a configurable status system. Currently ESX’s provided system is predominantly client-sided whereas this status system operates predominantly on the server and syncs its state with the database.
+
+This is intended to be used with pc-hud and pc-consumables, however, they can be easily be omitted / replaced with some scripting knowledge.
 
 Moving the system to the server allows for:
 - More security / forced server side validation
 - Flexible durations (that either persist or do not persist across disconnects / reboots)
 - Interactable stats that do not need to share their state with clients
 
-This need system will not work out of the box with esx_hud for displaying status information.
-
-# Drawbacks
-This is a work in progress so you may run into performance issues using this resource - I would not recommend using it in a production environment before you can evaluate how your setup is going to impact performance. I would especially advise caution in the case of a split server / database server set up.
-
-This resource currently syncs its state to the database which inherently involves overhead. I am not sure if this is going to scale all that well and the only benefits of doing so are that there is a minimal risk of data loss on a server crash and that a large data buffer / copy of the database is not required.
-
-If the integrity of data is not worth the performance of this approach, then I intend to rewrite significant parts of this to utilize a large, internal state buffer that syncs periodically or on player connect / disconnect.
-
-# Dependencies
-This resource is intended to be used in tandem with pc-consumables / pc-hud in an ox_inventory environment, but you could easily omit pc-consumables or replace pc-hud.
-
-Additionally, you will need ESX.
-
-# Installation
-To install pc-needs:
-- Place the latest release into the resources folder
-- Run the provided SQL script if this is the first installation
-- Review config.lua for your needs
-- Ensure pc-needs
-
-# Known issues
-For some reason, altering status types in the config.lua after already running pc-needs can occasionally cause SQL errors. If this occurs you may need to reset all status / effect data by doing the following:
-```
-delete from status;
-delete from effect;
-delete from statusTypes;
-```
-
-Alternatively you may use the removeType command in game to remove every existing statusType.
-
-There is also an issue you can create by changing the max and min amounts in the config without changing the table definition's constraints. If you run into this, you should drop and recreate the relevant tables with adjusted constraint values that match the new max and min values in the config.
-
 # Features
-
 ## Traditional needs
 This system supports basic needs that are subject to a time decay (like hunger and thirst) while a player is connected.
-
-## Virtual needs
-This system computes tick effect by status type according to the precedence of the status type. As such, you are able make computed or virtual needs that are the result of one or more, lower precedence, status types (see toxicity.)
 
 ## Temporary effects
 Exports can add temporary or permanent buffs / enfeeblements to players that expire in real time as opposed to tick timing while a player is connected.
@@ -61,12 +25,27 @@ Exports can be used to make rolls against RPG / reputation-like status types wit
 
 ## Player augmentations
 This resource comes with the following augmentations that can trigger based off of status type set up:
-
 - Player speed (caffeine)
 - Acid effect
 - Drunk effect (plus 5% chance of random outbursts, see config.lua)
 - High effect (thc)
 - Death / overdose
+
+## [Preview](https://streamable.com/86ygwm)
+In this preview, I am using a separate script to remove the minimap health and armor bars based on this [thread](https://forum.cfx.re/t/minimap-without-health-armour-bar/937129) - this is not the doing of pc-hud. Chat is [cc-chat](https://forum.cfx.re/t/cc-chat-chat-theme/4840882). Minimap [here](https://forum.cfx.re/t/free-release-postal-code-map-minimap-fixed/4882127).
+
+## Drawbacks
+Effect ticks use SQL to correctly store and calculate expiration state. As such, having a large player base alongside a high latency connection to your db may cause server performance issues.
+
+## Dependencies
+This resource is intended to be used in tandem with pc-consumables / pc-hud in an ox_inventory environment, but you could easily omit pc-consumables or replace pc-hud.
+
+Additionally, you will need ESX. There is also a dependency on rpemotes if you decide to utilize pc-consumables.
+
+## Additional credit
+pc-hud is my first TypeScript / React project. As such, I heavily referenced (and directly copied with proper licensing / attribution some of) the build and utility scripts used in the graphical components of ox_inventory. I give credit to Linden, Dunak, Luke, and the other contributors of ox_inventory for this.
+
+If you feel that I have not properly credited, or honored the license of, the contributors of ox_inventory then let me know so that I can properly do so.
 
 # Exports
 Resources that intend to use this need system will need to utilize the following exports.
@@ -143,7 +122,7 @@ bindValue(field)
 ```
 - field (int): The field to bind
 
-Used to bind an amount between pc-need's max and min values as configured.
+Used to bind an amount between pc-need's max and min values (0 and 100,000.)
 
 ## Events
 A single server event, `pc-needs:server:tick`, is exposed so that a resource may listen for tick timing from this resource.

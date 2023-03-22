@@ -1,16 +1,6 @@
-create table statusTypes (
-    name varchar(20) not null,
-    defaultAmount int not null,
-    precedence int not null unique,
-    availableToClient bit not null,
-    tickDecay int not null,
-    primary key ( name ),
-    constraint check (defaultAmount between 0 and 100000)
-);
-
 create table status (
     identifier varchar(60) not null,
-    statusTypeName varchar(20) not null references statusTypes(name),
+    statusTypeName varchar(20) not null,
     amount int not null,
     primary key ( identifier, statusTypeName ),
     constraint check (amount between 0 and 100000)
@@ -18,7 +8,7 @@ create table status (
 
 create table effect (
     identifier varchar(60) not null,
-    statusTypeName varchar(20) not null references statusTypes(name),
+    statusTypeName varchar(20) not null,
     `type` char(4) not null,
     amount int not null,
     created datetime not null,

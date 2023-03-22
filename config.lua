@@ -1,7 +1,14 @@
+-- Do not touch this next line
+local bindValue = bindValue
+
+-- Config
 Config = {}
 
 -- Enables /statusRoll for testing / setup of the StatMaxImpactOnStatusRoll / StatusPointToRollAgainst
 Config.Debug = false
+
+-- Use effects - would not recommend for a high latency db connection
+Config.UseEffects = true
 
 -- Seconds between status ticks - be mindful of this value when setting up tickDecay on status types
 Config.TickTime = 5
@@ -33,7 +40,6 @@ Config.Status = {}
 
 Config.Status.dexterity = {
     defaultAmount = statMidpoint,
-    precedence = 1,
     availableToClient = false,
     tickDecay = 0,
     onTick = nil
@@ -41,7 +47,6 @@ Config.Status.dexterity = {
 
 Config.Status.intelligence = {
     defaultAmount = statMidpoint,
-    precedence = 2,
     availableToClient = false,
     tickDecay = 0,
     onTick = nil
@@ -49,7 +54,6 @@ Config.Status.intelligence = {
 
 Config.Status.luck = {
     defaultAmount = statMidpoint,
-    precedence = 3,
     availableToClient = false,
     tickDecay = 0,
     onTick = nil
@@ -57,15 +61,6 @@ Config.Status.luck = {
 
 Config.Status.strength = {
     defaultAmount = statMidpoint,
-    precedence = 4,
-    availableToClient = false,
-    tickDecay = 0,
-    onTick = nil
-}
-
-Config.Status.crafting = {
-    defaultAmount = 0,
-    precedence = 5,
     availableToClient = false,
     tickDecay = 0,
     onTick = nil
@@ -73,7 +68,6 @@ Config.Status.crafting = {
 
 Config.Status.gathering = {
     defaultAmount = 0,
-    precedence = 6,
     availableToClient = false,
     tickDecay = 0,
     onTick = nil
@@ -81,7 +75,6 @@ Config.Status.gathering = {
 
 Config.Status.hunger = {
     defaultAmount = 100000,
-    precedence = 7,
     availableToClient = true,
     tickDecay = 50,
     onTick = function(source, identifier, value)
@@ -93,7 +86,6 @@ Config.Status.hunger = {
 
 Config.Status.thirst = {
     defaultAmount = 100000,
-    precedence = 8,
     availableToClient = true,
     tickDecay = 80,
     onTick = function(source, identifier, value)
@@ -105,7 +97,6 @@ Config.Status.thirst = {
 
 Config.Status.stress = {
     defaultAmount = 0,
-    precedence = 9,
     availableToClient = true,
     tickDecay = 150,
     onTick = function(source, identifier, value)
@@ -134,7 +125,6 @@ Config.Status.stress = {
 
 Config.Status.caffeine = {
     defaultAmount = 0,
-    precedence = 10,
     availableToClient = true,
     tickDecay = 3000,
     onTick = function(source, identifier, value)
@@ -155,7 +145,6 @@ local outburstEmotes = {'stumble', 'idledrunk', 'idledrunk2', 'idledrunk3'}
 
 Config.Status.alcohol = {
     defaultAmount = 0,
-    precedence = 11,
     availableToClient = true,
     tickDecay = 1000,
     onTick = function(source, identifier, value)
@@ -178,14 +167,10 @@ Config.Status.alcohol = {
 
 Config.Status.acid = {
     defaultAmount = 0,
-    precedence = 12,
     availableToClient = true,
     tickDecay = 2000,
     onTick = function(source, identifier, value)
-        if value == 100000 then -- Full acid should kill
-            kill(source)
-            TriggerClientEvent('pc-needs:client:SetAcidEffect', source, true)
-        elseif value > 0 then -- Any acid should give screen effect
+        if value > 0 then -- Any acid should give screen effect
             TriggerClientEvent('pc-needs:client:SetAcidEffect', source, true)
         else -- No acid should have no screen effect
             TriggerClientEvent('pc-needs:client:SetAcidEffect', source, false)
@@ -195,34 +180,13 @@ Config.Status.acid = {
 
 Config.Status.thc = {
     defaultAmount = 0,
-    precedence = 13,
     availableToClient = true,
-    tickDecay = 6969,
+    tickDecay = 7000,
     onTick = function(source, identifier, value)
         if value >= statMidpoint then -- Half thc should have screen effect
             TriggerClientEvent('pc-needs:client:SetWeedEffect', source, true)
         else -- Less than half thc should not have screen effect
             TriggerClientEvent('pc-needs:client:SetWeedEffect', source, false)
-        end
-    end
-}
-
-Config.Status.toxicity = {
-    defaultAmount = 0,
-    precedence = 14,
-    availableToClient = true,
-    tickDecay = 0,
-    onTick = function(source, identifier, value)
-        local str = getStatusAmount(identifier, 'stress')
-        local caf = getStatusAmount(identifier, 'caffeine')
-        local alc = getStatusAmount(identifier, 'alcohol')
-        local aci = getStatusAmount(identifier, 'acid')
-        local thc = getStatusAmount(identifier, 'thc')
-        local newAmount = bindValue((str * 0.05) + (caf * 0.5) + (alc * 0.8) + (aci * 0.3) + (thc * 0.01))
-        setStatus(identifier, 'toxicity', newAmount)
-
-        if newAmount == 100000 then -- If a linear sum of drug status amounts adds to full toxicity the player should die
-            kill(source)
         end
     end
 }

@@ -1,3 +1,14 @@
+local addType = addType
+local addEffect = addEffect
+local alterStatus = alterStatus
+local effectTick = effectTick
+local getStatusAmount = getStatusAmount
+local removeEffect = removeEffect
+local setStatus = setStatus
+local statusRoll = statusRoll
+local statusTick = statusTick
+local tickSingleStatus = tickSingleStatus
+
 -- Register commands
 ESX.RegisterCommand('removeType', 'admin', function(xPlayer, args, showError)
     local name = args.name
@@ -180,17 +191,19 @@ if Config.Debug then
 end
 
 -- Tick thread
-RegisterNetEvent('pc-needs:server:tick', function()
-    statusTick()
-    effectTick()
-end)
+if Config.UseEffects then
+    AddEventHandler('pc-needs:server:tick', function()
+        statusTick()
+        effectTick()
+    end)
+else
+    AddEventHandler('pc-needs:server:tick', function()
+        statusTick()
+    end)
+end
 
 CreateThread(function()
     -- Use status calls to make configured types
-    for k,v in pairs(Config.Status) do
-        addType(k, v.defaultAmount, v.precedence, v.availableToClient, v.tickDecay, v.onTick)
-    end
-
     local tickTime = Config.TickTime * 1000
 
     while true do
