@@ -1,6 +1,3 @@
--- Do not touch this next line
-local bindValue = bindValue
-
 -- Config
 Config = {}
 
