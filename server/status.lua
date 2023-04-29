@@ -290,9 +290,10 @@ local effectTickRunning = false
 function effectTick()
     if not effectTickRunning then
         effectTickRunning = true
+        local data
 
         for _,v in pairs(ESX.GetExtendedPlayers()) do
-            local data = MySQL.prepare.await('SELECT statusTypeName, type from effect where expires <= now() and identifier = ?',
+            data = MySQL.prepare.await('SELECT statusTypeName, type from effect where expires <= now() and identifier = ?',
                 { v.identifier })
 
             if type(data) == 'table' then
@@ -302,6 +303,31 @@ function effectTick()
                         break
                     else
                         removeEffect(v.identifier, q.statusTypeName, q.type)
+                    end
+                end
+            end
+
+            data = MySQL.prepare.await('SELECT statusTypeName, type, amount from effect where expires > now() and identifier = ?',
+                { v.identifier })
+
+            if type(data) == 'table' then
+                for _,q in pairs(data) do
+                    if type(q) ~= 'table' then
+                        if data.type == 'buff' then
+                            status[v.identifier][data.statusTypeName] = math.max(status[v.identifier][data.statusTypeName], data.amount)
+                            break
+                        else
+                            status[v.identifier][data.statusTypeName] = math.min(status[v.identifier][data.statusTypeName], 100000 - data.amount)
+                            break
+                        end
+                    else
+                        if data.type == 'buff' then
+                            status[v.identifier][q.statusTypeName] = math.max(status[v.identifier][q.statusTypeName], q.amount)
+                            break
+                        else
+                            status[v.identifier][q.statusTypeName] = math.min(status[v.identifier][q.statusTypeName], 100000 - q.amount)
+                            break
+                        end
                     end
                 end
             end
