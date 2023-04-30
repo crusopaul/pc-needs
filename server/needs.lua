@@ -193,8 +193,8 @@ end
 -- Tick thread
 if Config.UseEffects then
     AddEventHandler('pc-needs:server:tick', function()
-        statusTick()
         effectTick()
+        statusTick()
     end)
 else
     AddEventHandler('pc-needs:server:tick', function()

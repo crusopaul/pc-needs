@@ -261,12 +261,15 @@ exports('bindValue', bindValue)
 
 -- global tick control
 function statusTick()
+    local tickDecay
+    local identifier
+    local currentAmount
+
     for k,v in pairs(statusTypes) do
-        local tickDecay = v.tickDecay
+        tickDecay = v.tickDecay
 
         for l,q in pairs(identMap) do
-            local identifier = q
-            local currentAmount
+            identifier = q
 
             if status[identifier] then
                 currentAmount = status[identifier][k] or v.defaultAmount
@@ -293,40 +296,39 @@ function effectTick()
         local data
 
         for _,v in pairs(ESX.GetExtendedPlayers()) do
+            if not status[v.identifier] then
+                status[v.identifier] = {}
+            end
+
             data = MySQL.prepare.await('SELECT statusTypeName, type from effect where expires <= now() and identifier = ?',
                 { v.identifier })
 
-            if type(data) == 'table' then
-                for _,q in pairs(data) do
-                    if type(q) ~= 'table' then
-                        removeEffect(v.identifier, data.statusTypeName, data.type)
-                        break
-                    else
+            if data then
+                if data[1] then
+                    for _,q in pairs(data) do
                         removeEffect(v.identifier, q.statusTypeName, q.type)
                     end
+                else
+                    removeEffect(v.identifier, data.statusTypeName, data.type)
                 end
             end
 
             data = MySQL.prepare.await('SELECT statusTypeName, type, amount from effect where expires > now() and identifier = ?',
                 { v.identifier })
 
-            if type(data) == 'table' then
-                for _,q in pairs(data) do
-                    if type(q) ~= 'table' then
-                        if data.type == 'buff' then
-                            status[v.identifier][data.statusTypeName] = math.max(status[v.identifier][data.statusTypeName], data.amount)
-                            break
-                        else
-                            status[v.identifier][data.statusTypeName] = math.min(status[v.identifier][data.statusTypeName], 100000 - data.amount)
-                            break
-                        end
+            if data then
+                if not data[1] then
+                    if data.type == 'buff' then
+                        status[v.identifier][data.statusTypeName] = math.max(status[v.identifier][data.statusTypeName] or statusTypes[data.statusTypeName].defaultAmount, data.amount)
                     else
-                        if data.type == 'buff' then
-                            status[v.identifier][q.statusTypeName] = math.max(status[v.identifier][q.statusTypeName], q.amount)
-                            break
+                        status[v.identifier][data.statusTypeName] = math.min(status[v.identifier][data.statusTypeName] or statusTypes[data.statusTypeName].defaultAmount, 100000 - data.amount)
+                    end
+                else
+                    for l,q in pairs(data) do
+                        if q.type == 'buff' then
+                            status[v.identifier][q.statusTypeName] = math.max(status[v.identifier][q.statusTypeName] or statusTypes[q.statusTypeName].defaultAmount, q.amount)
                         else
-                            status[v.identifier][q.statusTypeName] = math.min(status[v.identifier][q.statusTypeName], 100000 - q.amount)
-                            break
+                            status[v.identifier][q.statusTypeName] = math.min(status[v.identifier][q.statusTypeName] or statusTypes[q.statusTypeName].defaultAmount, 100000 - q.amount)
                         end
                     end
                 end
