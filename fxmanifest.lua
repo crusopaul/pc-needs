@@ -1,5 +1,5 @@
 description 'A SQL based need system for an ESX environment.'
-version '1.0.3'
+version '1.1.0'
 fx_version 'cerulean'
 game 'gta5'
 lua54 'yes'
